@@ -4,7 +4,9 @@
 
 ## 下载安装
 
-前往本仓库 **Releases** 下载朋友分享版 ZIP。解压后，把两款 `.app` 拖入“应用程序”，分别打开即可。
+[下载朋友分享版 ZIP](https://github.com/just-talk-tomorrow/desktop-shelves/releases/download/v2026.10.16/Desktop-Shelves-macOS-AppleSilicon-20261016.zip) · [发行说明与校验和](https://github.com/just-talk-tomorrow/desktop-shelves/releases/tag/v2026.10.16)
+
+解压后，把两款 `.app` 拖入“应用程序”，分别打开即可。
 
 - **系统**：macOS 14 或更新版本，Apple Silicon（M 系列芯片）Mac。
 - **签名**：个人临时签名，未经过 Apple 公证。若系统阻止启动，请核对来源后使用系统提供的允许打开流程。
