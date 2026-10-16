@@ -1,0 +1,662 @@
+[
+  {
+    "file": "sticker-01.png",
+    "width": 138,
+    "height": 166
+  },
+  {
+    "file": "sticker-02.png",
+    "width": 185,
+    "height": 148
+  },
+  {
+    "file": "sticker-03.png",
+    "width": 138,
+    "height": 169
+  },
+  {
+    "file": "sticker-04.png",
+    "width": 166,
+    "height": 143
+  },
+  {
+    "file": "sticker-05.png",
+    "width": 156,
+    "height": 136
+  },
+  {
+    "file": "sticker-06.png",
+    "width": 126,
+    "height": 167
+  },
+  {
+    "file": "sticker-07.png",
+    "width": 143,
+    "height": 209
+  },
+  {
+    "file": "sticker-08.png",
+    "width": 150,
+    "height": 209
+  },
+  {
+    "file": "sticker-09.png",
+    "width": 168,
+    "height": 209
+  },
+  {
+    "file": "sticker-10.png",
+    "width": 199,
+    "height": 209
+  },
+  {
+    "file": "sticker-11.png",
+    "width": 185,
+    "height": 209
+  },
+  {
+    "file": "sticker-12.png",
+    "width": 151,
+    "height": 209
+  },
+  {
+    "file": "sticker-13.png",
+    "width": 177,
+    "height": 202
+  },
+  {
+    "file": "sticker-14.png",
+    "width": 201,
+    "height": 209
+  },
+  {
+    "file": "sticker-15.png",
+    "width": 202,
+    "height": 131
+  },
+  {
+    "file": "sticker-16.png",
+    "width": 196,
+    "height": 204
+  },
+  {
+    "file": "sticker-17.png",
+    "width": 163,
+    "height": 209
+  },
+  {
+    "file": "sticker-18.png",
+    "width": 167,
+    "height": 209
+  },
+  {
+    "file": "sticker-19.png",
+    "width": 171,
+    "height": 124
+  },
+  {
+    "file": "sticker-20.png",
+    "width": 209,
+    "height": 200
+  },
+  {
+    "file": "sticker-21.png",
+    "width": 200,
+    "height": 168
+  },
+  {
+    "file": "sticker-22.png",
+    "width": 198,
+    "height": 101
+  },
+  {
+    "file": "sticker-23.png",
+    "width": 185,
+    "height": 202
+  },
+  {
+    "file": "sticker-24.png",
+    "width": 173,
+    "height": 196
+  },
+  {
+    "file": "sticker-25.png",
+    "width": 164,
+    "height": 198
+  },
+  {
+    "file": "sticker-26.png",
+    "width": 140,
+    "height": 150
+  },
+  {
+    "file": "sticker-27.png",
+    "width": 170,
+    "height": 183
+  },
+  {
+    "file": "sticker-28.png",
+    "width": 184,
+    "height": 176
+  },
+  {
+    "file": "sticker-29.png",
+    "width": 187,
+    "height": 174
+  },
+  {
+    "file": "sticker-30.png",
+    "width": 192,
+    "height": 123
+  },
+  {
+    "file": "sticker-31.png",
+    "width": 134,
+    "height": 168
+  },
+  {
+    "file": "sticker-32.png",
+    "width": 177,
+    "height": 175
+  },
+  {
+    "file": "sticker-33.png",
+    "width": 163,
+    "height": 176
+  },
+  {
+    "file": "sticker-34.png",
+    "width": 202,
+    "height": 155
+  },
+  {
+    "file": "sticker-35.png",
+    "width": 189,
+    "height": 155
+  },
+  {
+    "file": "sticker-36.png",
+    "width": 185,
+    "height": 132
+  },
+  {
+    "file": "paper-01.png",
+    "width": 217,
+    "height": 101
+  },
+  {
+    "file": "paper-02.png",
+    "width": 219,
+    "height": 105
+  },
+  {
+    "file": "paper-03.png",
+    "width": 221,
+    "height": 107
+  },
+  {
+    "file": "paper-04.png",
+    "width": 220,
+    "height": 109
+  },
+  {
+    "file": "paper-05.png",
+    "width": 220,
+    "height": 108
+  },
+  {
+    "file": "paper-06.png",
+    "width": 224,
+    "height": 103
+  },
+  {
+    "file": "paper-07.png",
+    "width": 221,
+    "height": 137
+  },
+  {
+    "file": "paper-08.png",
+    "width": 176,
+    "height": 166
+  },
+  {
+    "file": "paper-09.png",
+    "width": 216,
+    "height": 193
+  },
+  {
+    "file": "paper-10.png",
+    "width": 223,
+    "height": 165
+  },
+  {
+    "file": "paper-11.png",
+    "width": 190,
+    "height": 184
+  },
+  {
+    "file": "paper-12.png",
+    "width": 211,
+    "height": 152
+  },
+  {
+    "file": "paper-13.png",
+    "width": 198,
+    "height": 197
+  },
+  {
+    "file": "paper-14.png",
+    "width": 220,
+    "height": 129
+  },
+  {
+    "file": "paper-15.png",
+    "width": 221,
+    "height": 237
+  },
+  {
+    "file": "paper-16.png",
+    "width": 230,
+    "height": 63
+  },
+  {
+    "file": "paper-17.png",
+    "width": 228,
+    "height": 72
+  },
+  {
+    "file": "paper-18.png",
+    "width": 157,
+    "height": 243
+  },
+  {
+    "file": "paper-19.png",
+    "width": 211,
+    "height": 105
+  },
+  {
+    "file": "paper-20.png",
+    "width": 243,
+    "height": 64
+  },
+  {
+    "file": "paper-21.png",
+    "width": 175,
+    "height": 174
+  },
+  {
+    "file": "paper-22.png",
+    "width": 238,
+    "height": 165
+  },
+  {
+    "file": "paper-23.png",
+    "width": 215,
+    "height": 149
+  },
+  {
+    "file": "paper-24.png",
+    "width": 178,
+    "height": 162
+  },
+  {
+    "file": "american-01.png",
+    "width": 189,
+    "height": 149
+  },
+  {
+    "file": "american-02.png",
+    "width": 135,
+    "height": 183
+  },
+  {
+    "file": "american-03.png",
+    "width": 209,
+    "height": 178
+  },
+  {
+    "file": "american-04.png",
+    "width": 209,
+    "height": 90
+  },
+  {
+    "file": "american-05.png",
+    "width": 209,
+    "height": 199
+  },
+  {
+    "file": "american-06.png",
+    "width": 196,
+    "height": 191
+  },
+  {
+    "file": "american-07.png",
+    "width": 191,
+    "height": 193
+  },
+  {
+    "file": "american-08.png",
+    "width": 203,
+    "height": 179
+  },
+  {
+    "file": "american-09.png",
+    "width": 209,
+    "height": 110
+  },
+  {
+    "file": "american-10.png",
+    "width": 166,
+    "height": 185
+  },
+  {
+    "file": "american-11.png",
+    "width": 118,
+    "height": 207
+  },
+  {
+    "file": "american-12.png",
+    "width": 173,
+    "height": 190
+  },
+  {
+    "file": "american-13.png",
+    "width": 181,
+    "height": 179
+  },
+  {
+    "file": "american-14.png",
+    "width": 183,
+    "height": 165
+  },
+  {
+    "file": "american-15.png",
+    "width": 180,
+    "height": 157
+  },
+  {
+    "file": "american-16.png",
+    "width": 207,
+    "height": 180
+  },
+  {
+    "file": "american-17.png",
+    "width": 209,
+    "height": 205
+  },
+  {
+    "file": "american-18.png",
+    "width": 199,
+    "height": 146
+  },
+  {
+    "file": "american-19.png",
+    "width": 189,
+    "height": 203
+  },
+  {
+    "file": "american-20.png",
+    "width": 182,
+    "height": 205
+  },
+  {
+    "file": "american-21.png",
+    "width": 197,
+    "height": 157
+  },
+  {
+    "file": "american-22.png",
+    "width": 136,
+    "height": 197
+  },
+  {
+    "file": "american-23.png",
+    "width": 129,
+    "height": 195
+  },
+  {
+    "file": "american-24.png",
+    "width": 199,
+    "height": 195
+  },
+  {
+    "file": "american-25.png",
+    "width": 108,
+    "height": 209
+  },
+  {
+    "file": "american-26.png",
+    "width": 102,
+    "height": 195
+  },
+  {
+    "file": "american-27.png",
+    "width": 170,
+    "height": 209
+  },
+  {
+    "file": "american-28.png",
+    "width": 176,
+    "height": 206
+  },
+  {
+    "file": "american-29.png",
+    "width": 184,
+    "height": 209
+  },
+  {
+    "file": "american-30.png",
+    "width": 193,
+    "height": 190
+  },
+  {
+    "file": "american-31.png",
+    "width": 190,
+    "height": 188
+  },
+  {
+    "file": "american-32.png",
+    "width": 209,
+    "height": 162
+  },
+  {
+    "file": "american-33.png",
+    "width": 195,
+    "height": 195
+  },
+  {
+    "file": "american-34.png",
+    "width": 177,
+    "height": 194
+  },
+  {
+    "file": "american-35.png",
+    "width": 178,
+    "height": 194
+  },
+  {
+    "file": "american-36.png",
+    "width": 172,
+    "height": 189
+  },
+  {
+    "file": "construct-01.png",
+    "width": 187,
+    "height": 174
+  },
+  {
+    "file": "construct-02.png",
+    "width": 209,
+    "height": 156
+  },
+  {
+    "file": "construct-03.png",
+    "width": 186,
+    "height": 165
+  },
+  {
+    "file": "construct-04.png",
+    "width": 200,
+    "height": 154
+  },
+  {
+    "file": "construct-05.png",
+    "width": 208,
+    "height": 144
+  },
+  {
+    "file": "construct-06.png",
+    "width": 181,
+    "height": 159
+  },
+  {
+    "file": "construct-07.png",
+    "width": 187,
+    "height": 209
+  },
+  {
+    "file": "construct-08.png",
+    "width": 209,
+    "height": 184
+  },
+  {
+    "file": "construct-09.png",
+    "width": 162,
+    "height": 178
+  },
+  {
+    "file": "construct-10.png",
+    "width": 177,
+    "height": 175
+  },
+  {
+    "file": "construct-11.png",
+    "width": 208,
+    "height": 125
+  },
+  {
+    "file": "construct-12.png",
+    "width": 154,
+    "height": 202
+  },
+  {
+    "file": "construct-13.png",
+    "width": 186,
+    "height": 182
+  },
+  {
+    "file": "construct-14.png",
+    "width": 209,
+    "height": 178
+  },
+  {
+    "file": "construct-15.png",
+    "width": 187,
+    "height": 186
+  },
+  {
+    "file": "construct-16.png",
+    "width": 184,
+    "height": 183
+  },
+  {
+    "file": "construct-17.png",
+    "width": 185,
+    "height": 181
+  },
+  {
+    "file": "construct-18.png",
+    "width": 176,
+    "height": 209
+  },
+  {
+    "file": "construct-19.png",
+    "width": 170,
+    "height": 201
+  },
+  {
+    "file": "construct-20.png",
+    "width": 178,
+    "height": 179
+  },
+  {
+    "file": "construct-21.png",
+    "width": 175,
+    "height": 173
+  },
+  {
+    "file": "construct-22.png",
+    "width": 207,
+    "height": 197
+  },
+  {
+    "file": "construct-23.png",
+    "width": 201,
+    "height": 154
+  },
+  {
+    "file": "construct-24.png",
+    "width": 144,
+    "height": 207
+  },
+  {
+    "file": "construct-25.png",
+    "width": 175,
+    "height": 192
+  },
+  {
+    "file": "construct-26.png",
+    "width": 167,
+    "height": 205
+  },
+  {
+    "file": "construct-27.png",
+    "width": 198,
+    "height": 195
+  },
+  {
+    "file": "construct-28.png",
+    "width": 198,
+    "height": 128
+  },
+  {
+    "file": "construct-29.png",
+    "width": 191,
+    "height": 151
+  },
+  {
+    "file": "construct-30.png",
+    "width": 172,
+    "height": 196
+  },
+  {
+    "file": "construct-31.png",
+    "width": 169,
+    "height": 163
+  },
+  {
+    "file": "construct-32.png",
+    "width": 167,
+    "height": 165
+  },
+  {
+    "file": "construct-33.png",
+    "width": 189,
+    "height": 173
+  },
+  {
+    "file": "construct-34.png",
+    "width": 196,
+    "height": 131
+  },
+  {
+    "file": "construct-35.png",
+    "width": 196,
+    "height": 127
+  },
+  {
+    "file": "construct-36.png",
+    "width": 155,
+    "height": 168
+  }
+]

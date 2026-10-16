@@ -1,0 +1,15 @@
+.DS_Store
+.build/
+node_modules/
+output/
+*.app/
+*.zip
+*.dmg
+.env*
+*.log
+cookies.txt
+cookie.txt
+library.json
+manifest.json
+style.json
+

@@ -1,0 +1,10 @@
+Metal Record Shelf / 金属唱片架
+
+Local custom application; not affiliated with or endorsed by NetEase Cloud Music or MuCase.
+Visual assets in the shelf are procedural SwiftUI shapes; album artwork belongs to its respective owners and is retrieved only when requested by the user.
+
+NetEase community API: @neteasecloudmusicapienhanced/api 4.41.1
+Source: https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced
+Its license and dependencies' license files remain inside Backend/node_modules.
+Node.js runtime is bundled; its full license is in Node-LICENSE.txt.
+No media files, user credentials or music content are bundled.
