@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a reproducible bug in Codex Pacer
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please check the [user guide](https://github.com/RyanZhangNTU/codex-pacer/blob/main/docs/guide.md#troubleshooting) first.
+        Do not include credentials, account details or private task content in text, logs or screenshots.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Codex Pacer version, macOS version, and Apple silicon or Intel
+      placeholder: Codex Pacer 3.0.0, macOS 26.1, Apple silicon
+    validations:
+      required: true
+  - type: dropdown
+    id: module
+    attributes:
+      label: Affected module
+      options:
+        - Codex
+        - Claude Code
+        - Both
+        - Not related to a module
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Task source
+      multiple: true
+      options:
+        - This Mac
+        - SSH host
+        - Codex Remote Control
+        - Not related to tasks
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest reliable steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Optional. Hide private task titles first; Settings → General → Hide Project Names helps.

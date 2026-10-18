@@ -1,0 +1,115 @@
+import Foundation
+
+public enum AppLanguage: String, CaseIterable, Sendable {
+    case english = "en"
+    case simplifiedChinese = "zh-Hans"
+
+    public var locale: Locale {
+        let region = Locale.current.region?.identifier
+        return Locale(identifier: region.map { rawValue + "_" + $0 } ?? rawValue)
+    }
+}
+
+public enum LanguagePreference: String, CaseIterable, Sendable {
+    case system
+    case simplifiedChinese = "zh-Hans"
+    case english = "en"
+
+    public static let defaultsKey = "appLanguage"
+    public static func load(from defaults: UserDefaults = .standard) -> Self {
+        defaults.string(forKey: defaultsKey).flatMap(Self.init(rawValue:)) ?? .system
+    }
+    public func resolved(preferredLanguages: [String] = Self.systemLanguages()) -> AppLanguage {
+        switch self {
+        case .english: return .english
+        case .simplifiedChinese: return .simplifiedChinese
+        case .system:
+            for identifier in preferredLanguages {
+                let language = identifier.replacingOccurrences(of: "_", with: "-").lowercased().split(separator: "-").first
+                if language == "zh" { return .simplifiedChinese }
+                if language == "en" { return .english }
+            }
+            return .english
+        }
+    }
+    public static func systemLanguages(defaults: UserDefaults = .standard) -> [String] {
+        // Ignore this app's explicit override when the user chooses Follow macOS.
+        defaults.persistentDomain(forName: UserDefaults.globalDomain)?["AppleLanguages"] as? [String]
+            ?? Locale.preferredLanguages
+    }
+    public func save(to defaults: UserDefaults = .standard) {
+        defaults.set(rawValue, forKey: Self.defaultsKey)
+        // This is the application's preferences domain, never NSGlobalDomain.
+        // Relaunch lets AppKit, open panels and Sparkle use the same language.
+        if self == .system { defaults.removeObject(forKey: "AppleLanguages") }
+        else { defaults.set([rawValue], forKey: "AppleLanguages") }
+    }
+    public var label: String {
+        switch self {
+        case .system: return L10n.text("language.system")
+        case .simplifiedChinese: return "简体中文"
+        case .english: return "English"
+        }
+    }
+}
+
+public enum L10n {
+    /// A language is fixed for one launch, including stored notices and errors.
+    public static let language = LanguagePreference.load().resolved()
+    public static var locale: Locale { language.locale }
+
+    public static let resourceBundle: Bundle = {
+        // Resolve the packaged copy explicitly before SwiftPM's bundle lookup.
+        if let url = Bundle.main.url(forResource: "CodexPacerIsland_PacerCore", withExtension: "bundle"),
+           let bundle = Bundle(url: url) { return bundle }
+        return Bundle.module
+    }()
+    /// SwiftPM 6.3 lowercases localization directory names (zh-hans.lproj).
+    /// Resolve the actual directory rather than relying on Bundle's case-sensitive language lookup.
+    public static func catalogURL(for language: AppLanguage) -> URL? {
+        let roots = [resourceBundle.resourceURL, resourceBundle.bundleURL].compactMap { $0 }
+        for root in roots {
+            let contents = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+            if let found = contents.first(where: { $0.lastPathComponent.lowercased() == language.rawValue.lowercased() + ".lproj" }) { return found }
+        }
+        return nil
+    }
+    private static let bundles: [AppLanguage: Bundle] = Dictionary(uniqueKeysWithValues: AppLanguage.allCases.compactMap {
+        guard let url = catalogURL(for: $0), let bundle = Bundle(url: url) else { return nil }
+        return ($0, bundle)
+    })
+
+    /// Views resolve the same keys on every render; bundle lookups and locale
+    /// construction are cached per language for the life of the process.
+    private final class Resolved: @unchecked Sendable {
+        let lock = NSLock()
+        var formats: [String: String] = [:]
+        var locales: [AppLanguage: Locale] = [:]
+    }
+    private static let resolved = Resolved()
+
+    public static func text(_ key: String, _ arguments: CVarArg..., language selected: AppLanguage? = nil) -> String {
+        let selected = selected ?? language
+        let cacheKey = selected.rawValue + "\u{1}" + key
+        resolved.lock.lock()
+        let cached = resolved.formats[cacheKey]
+        resolved.lock.unlock()
+        let format: String
+        if let cached { format = cached } else {
+            let fallback = bundles[.english]?.localizedString(forKey: key, value: key, table: nil) ?? key
+            format = bundles[selected]?.localizedString(forKey: key, value: fallback, table: nil) ?? fallback
+            resolved.lock.lock(); resolved.formats[cacheKey] = format; resolved.lock.unlock()
+        }
+        guard !arguments.isEmpty else { return format }
+        resolved.lock.lock()
+        let locale = resolved.locales[selected] ?? selected.locale
+        resolved.locales[selected] = locale
+        resolved.lock.unlock()
+        return String(format: format, locale: locale, arguments: arguments)
+    }
+
+    public static func date(_ value: Date, date dateStyle: Date.FormatStyle.DateStyle = .abbreviated,
+                            time timeStyle: Date.FormatStyle.TimeStyle = .shortened) -> String {
+        value.formatted(Date.FormatStyle(date: dateStyle, time: timeStyle).locale(locale))
+    }
+}

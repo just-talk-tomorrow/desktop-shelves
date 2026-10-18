@@ -1,0 +1,226 @@
+import AppKit
+import SwiftUI
+import PacerCore
+import QuartzCore
+
+private final class IslandPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
+@MainActor
+final class PanelController: NSObject {
+    private let model: IslandModel
+    private let panel: IslandPanel
+    private let presentation: IslandPresentation
+    private let hosting: ShelfHostingView
+    private var monitors: [Any] = []
+    private var observers: [NSObjectProtocol] = []
+    private var displayLink: CADisplayLink?
+    private var motion: IslandTransition?
+    private var motionRevision = 0
+    private var dragPasteboardGeneration = NSPasteboard(name: .drag).changeCount
+
+    init(model: IslandModel) {
+        self.model = model
+        let presentation = IslandPresentation()
+        self.presentation = presentation
+        hosting = ShelfHostingView(model: model, presentation: presentation)
+        panel = IslandPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        super.init()
+        panel.title = "Codex Pacer"
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.appearance = NSAppearance(named: .darkAqua)
+        panel.hasShadow = true
+        panel.level = .statusBar
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.becomesKeyOnlyIfNeeded = true
+        hosting.sizingOptions = []
+        hosting.safeAreaRegions = []
+        hosting.autoresizingMask = [.width, .height]
+        panel.contentView = hosting
+        model.onLayoutChange = { [weak self] in self?.layout() }
+        model.onShelfCaptureVisibility = { [weak self] hidden in
+            guard let self else { return }
+            if hidden { self.panel.orderOut(nil) }
+            else { self.layout(animated: false); self.panel.orderFrontRegardless() }
+        }
+        model.onFocusRequested = { [weak self] in
+            guard let self, !self.model.interactionSuspended else { return }
+            self.panel.orderFrontRegardless()
+        }
+        observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.layout(animated: false) }
+        })
+        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] _ in
+            Task { @MainActor in
+                guard let self, !self.model.pinned, !self.panel.frame.contains(NSEvent.mouseLocation) else { return }
+                self.model.close()
+            }
+        }) { monitors.append(monitor) }
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
+            if event.keyCode == 53, event.window === self?.panel { self?.model.close(); return nil }
+            return event
+        }) { monitors.append(monitor) }
+        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp], handler: { [weak self] event in
+            Task { @MainActor in
+                guard let self else { return }
+                if event.type == .leftMouseDown {
+                    self.dragPasteboardGeneration = NSPasteboard(name: .drag).changeCount
+                    return
+                }
+                if event.type == .leftMouseUp {
+                    if !self.model.shelf.importing { self.model.shelfDropTarget = false; self.model.holdShelf(false) }
+                    return
+                }
+                let point = NSEvent.mouseLocation
+                guard NSPasteboard(name: .drag).changeCount != self.dragPasteboardGeneration,
+                    let screen = self.panel.screen,
+                    abs(point.x - self.panel.frame.midX) < 270, point.y > screen.frame.maxY - 90,
+                    NSPasteboard(name: .drag).availableType(from: [.fileURL, .png, .tiff, .URL, .string]) != nil else { return }
+                self.model.holdShelf(true)
+                self.model.shelfDropTarget = true
+                self.panel.orderFrontRegardless()
+            }
+        }) { monitors.append(monitor) }
+        layout(animated: false)
+        panel.orderFrontRegardless()
+
+    }
+
+    func show() {
+        guard !model.interactionSuspended else { return }
+        model.pinned = true
+        model.setExpanded(true)
+        panel.orderFrontRegardless()
+    }
+
+    func setUpdatePresentationActive(_ active: Bool) {
+        guard active != model.interactionSuspended else { return }
+        model.setInteractionSuspended(active)
+        panel.ignoresMouseEvents = active
+        // A normal-level window is constrained below the menu bar. Restore the
+        // status-bar level before laying out the island at the screen's top edge.
+        panel.level = active ? .normal : .statusBar
+        // Snap closed before runModal; animation timers may not advance there.
+        layout(animated: false)
+        if active {
+            panel.resignKey()
+            panel.orderBack(nil)
+        } else {
+            // Return only the collapsed island without stealing updater focus.
+            panel.orderFrontRegardless()
+        }
+    }
+
+    private func layout(animated: Bool = true) {
+        if !model.expanded { panel.resignKey() }
+        let selected = NSScreen.screens.first {
+            ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.intValue == model.displayID
+        }
+        guard let screen = selected ?? NSScreen.screens.first else { return }
+        let demoNotch = model.isDemo && CommandLine.arguments.contains("--demo-notch")
+        let hardwareNotchWidth: CGFloat
+        if let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea {
+            hardwareNotchWidth = max(0, right.minX - left.maxX)
+        } else { hardwareNotchWidth = 0 }
+        let screenNotchSize = CGSize(width: demoNotch ? 180 : hardwareNotchWidth,
+            height: demoNotch ? 36 : screen.safeAreaInsets.top)
+        if model.screenNotchSize != screenNotchSize { model.screenNotchSize = screenNotchSize }
+        let mode: IslandDisplayMode = demoNotch ? .notch : model.displayMode
+        let layout = mode.layout(safeAreaTop: screenNotchSize.height, hardwareNotchWidth: screenNotchSize.width)
+        if model.isAttached != layout.attached { model.isAttached = layout.attached }
+        if model.notchWidth != layout.notchWidth { model.notchWidth = layout.notchWidth }
+        if model.baseHeaderHeight != layout.topHeight { model.baseHeaderHeight = layout.topHeight }
+        let headerHeight = layout.topHeight
+        if model.topHeight != headerHeight { model.topHeight = headerHeight }
+        let collapsedWidth = IslandWidth.desired(expanded: false, notchWidth: layout.notchWidth,
+            leading: 80, trailing: 65,
+            headerWidth: model.measuredCompactWidth)
+        let expandedWidth = IslandWidth.desired(expanded: true, notchWidth: layout.notchWidth,
+            leading: 80, trailing: 65,
+            contentWidth: 440, headerWidth: model.measuredCompactWidth)
+        let frame = IslandGeometry.frame(screen: screen.frame, visible: screen.visibleFrame, notchWidth: layout.notchWidth,
+            topHeight: model.topHeight, expanded: model.expanded, attached: layout.attached,
+            contentHeight: model.panelContentHeight, desiredWidth: model.expanded ? expandedWidth : collapsedWidth)
+        let expandedFrame = IslandGeometry.frame(screen: screen.frame, visible: screen.visibleFrame, notchWidth: layout.notchWidth,
+            topHeight: model.topHeight, expanded: true, attached: layout.attached, contentHeight: model.panelContentHeight,
+            desiredWidth: expandedWidth)
+        if presentation.canvas != expandedFrame.size { presentation.canvas = expandedFrame.size }
+        panel.collectionBehavior = model.showInFullscreen ? [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle] : [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        let current = presentation.sample
+        let hasBlackHeader = layout.attached && model.appearance == .liquidGlass
+        let target = IslandTransition.Sample.resting(at: frame, expanded: model.expanded, hasBlackHeader: hasBlackHeader)
+        let sameAnchor = abs(current.frame.maxY - frame.maxY) < 1 && abs(current.frame.midX - frame.midX) < 1
+        if animated && sameAnchor && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            // Quota/settings updates must not restart an unchanged destination.
+            if let motion, motion.target.frame == frame, motion.target.expansion == target.expansion,
+               motion.hasBlackHeader == hasBlackHeader { return }
+            if current.finished, current.frame == frame, current.expansion == target.expansion,
+               current.blackOpacity == target.blackOpacity {
+                stopMotion(); return
+            }
+            motion = IslandTransition(from: current, to: frame, opening: model.expanded,
+                                      hasBlackHeader: hasBlackHeader, start: CACurrentMediaTime())
+            motionRevision += 1
+            if displayLink == nil {
+                let link = screen.displayLink(target: self, selector: #selector(step(_:)))
+                let refreshRate = Float(max(30, screen.maximumFramesPerSecond))
+                link.preferredFrameRateRange = CAFrameRateRange(minimum: min(60, refreshRate),
+                                                                maximum: refreshRate, preferred: refreshRate)
+                displayLink = link
+                link.add(to: .main, forMode: .common)
+            }
+        } else {
+            stopMotion()
+            apply(target)
+        }
+    }
+
+    @objc private func step(_ link: CADisplayLink) {
+        guard var motion else { stopMotion(); return }
+        let revision = motionRevision
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            apply(motion.target)
+            if revision == motionRevision { stopMotion() }
+            return
+        }
+        let sample = motion.sample(at: link.targetTimestamp)
+        self.motion = motion
+        apply(sample)
+        if sample.finished, revision == motionRevision { stopMotion() }
+    }
+
+    private func apply(_ sample: IslandTransition.Sample) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        withTransaction(transaction) {
+            presentation.sample = sample
+            let frame = IslandGeometry.windowFrame(sample.frame)
+            if panel.frame != frame { panel.setFrame(frame, display: false) }
+            // Resolve SwiftUI geometry in the same frame without forcing a
+            // second synchronous window redraw or implicit glass animation.
+            hosting.layoutSubtreeIfNeeded()
+            // A transparent window caches its silhouette. Update it with the
+            // shell, not just at rest, which makes the floating shadow pop.
+            panel.invalidateShadow()
+        }
+        CATransaction.commit()
+    }
+
+    private func stopMotion() {
+        motionRevision += 1
+        displayLink?.invalidate(); displayLink = nil; motion = nil
+    }
+
+    func stop() {
+        stopMotion()
+        monitors.forEach { NSEvent.removeMonitor($0) }
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+        panel.orderOut(nil)
+    }
+}

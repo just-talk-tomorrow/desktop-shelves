@@ -1,0 +1,30 @@
+# Generated builds, exports and local data
+output/
+native/.build/
+native/.swiftpm/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+__pycache__/
+
+# Local credentials
+.env
+.env.*
+*.pem
+*.key
+*.p8
+*.p12
+*.cer
+*.crt
+*.csr
+*.der
+*.mobileprovision
+
+# Editor and OS state
+.DS_Store
+.vscode/
+.idea/
+*.sw?

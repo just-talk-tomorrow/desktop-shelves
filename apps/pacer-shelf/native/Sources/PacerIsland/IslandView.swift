@@ -1,0 +1,179 @@
+import SwiftUI
+import PacerCore
+import UniformTypeIdentifiers
+
+struct IslandView: View {
+    @ObservedObject var model: IslandModel
+    @ObservedObject var presentation: IslandPresentation
+    private var attached: Bool { model.isAttached }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            CompactIslandHeader(model: model, layout: model.compactLayout,
+                baseHeight: model.baseHeaderHeight, notchWidth: model.notchWidth)
+                .background(attached && model.appearance == .liquidGlass
+                    ? Color.black.opacity(presentation.blackOpacity) : Color.clear)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .overlay(alignment: .top) {
+            // Retire invisible content before the spring settles, so the final
+            // capsule frame only stops motion rather than changing its subtree.
+            if model.expanded || presentation.contentVisibility > 0 {
+                IslandExpandedContent(model: model)
+                    .frame(width: max(0, presentation.canvas.width - 2 * IslandMetrics.edgeInset),
+                           height: max(0, presentation.canvas.height - model.topHeight), alignment: .top)
+                    .padding(.horizontal, IslandMetrics.edgeInset)
+                    .opacity(presentation.contentVisibility)
+                    .offset(y: model.topHeight + (1 - presentation.contentVisibility) * 8)
+                    .allowsHitTesting(model.expanded && presentation.contentVisibility > 0.95)
+                    .accessibilityHidden(!model.expanded || presentation.contentVisibility < 0.95)
+            }
+        }
+        .foregroundStyle(PacerPalette.primary)
+        .modifier(IslandSurface(appearance: model.appearance, attached: attached, expanded: model.expanded,
+            progress: presentation.expansion))
+        .overlay(alignment: .bottom) {
+            if model.shelfDropTarget {
+                Text("松手存入暂存").font(.system(size: 11, weight: .semibold))
+                    .padding(.horizontal, 12).padding(.vertical, 5)
+                    .background(Color.black.opacity(0.9), in: Capsule()).padding(.bottom, 4).allowsHitTesting(false)
+            }
+        }
+        .onHover { model.hover($0) }
+        .onExitCommand { model.close() }
+        .preferredColorScheme(.dark)
+        .environment(\.locale, L10n.locale)
+    }
+}
+
+private struct IslandExpandedContent: View {
+    @ObservedObject var model: IslandModel
+
+    /// Room below the last section now that panel actions sit in the task header.
+    private static let bottomInset: CGFloat = 14
+
+    var body: some View {
+        ViewThatFits(in: .vertical) {
+            content
+            ScrollView(.vertical) {
+                content.background(CompactScrollbarStyle())
+            }
+            .scrollIndicators(.visible)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onPreferenceChange(ExpandedContentHeight.self) { height in
+            guard height > 0 else { return }
+            DispatchQueue.main.async { model.updateMeasuredContentHeight(height + Self.bottomInset) }
+        }
+        .onPreferenceChange(TaskRowIdealWidth.self) { width in
+            DispatchQueue.main.async { model.updateMeasuredContentWidth(width > 0 ? width + 2 * IslandMetrics.edgeInset : 0) }
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            taskContent
+            Hairline().padding(.horizontal, IslandMetrics.rowInset).padding(.vertical, 10)
+            quotaContent
+            Hairline().padding(.horizontal, IslandMetrics.rowInset).padding(.vertical, 10)
+            ShelfView(store: model.shelf, model: model)
+        }
+        .padding(.top, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(GeometryReader { geometry in
+            Color.clear.preference(key: ExpandedContentHeight.self, value: geometry.size.height)
+        })
+    }
+
+    @ViewBuilder private var taskContent: some View {
+        if model.visibleActivities.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                IslandSectionHeader(title: L10n.text("layout.group.tasks"), detail: "0") { IslandPanelControls(model: model) }
+                HStack(spacing: 12) {
+                    StatusTile(symbol: StatusSymbols.idle, tint: PacerPalette.secondary)
+                    Text(L10n.text("activity.no_tasks")).font(.system(size: 12, weight: .medium)).foregroundStyle(PacerPalette.secondary)
+                }
+                .padding(.horizontal, IslandMetrics.rowInset).padding(.vertical, 8)
+            }
+        } else {
+            TaskPagerView(model: model)
+        }
+        if let error = model.navigationError {
+            Label(error, systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 11)).foregroundStyle(PacerPalette.attention)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, IslandMetrics.rowInset).padding(.top, 6)
+        }
+    }
+
+    private var quotaContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            let single = model.enabledProviders.count == 1 ? model.enabledProviders.first : nil
+            IslandSectionHeader(title: L10n.text("layout.group.quota"), detail: single?.displayName,
+                detailColor: single?.tint ?? PacerPalette.tertiary)
+            if model.enabledProviders.isEmpty {
+                HStack(spacing: 12) {
+                    Text(L10n.text("provider.none_enabled")).font(.system(size: 12)).foregroundStyle(PacerPalette.secondary)
+                    Spacer(minLength: 8)
+                    Button(L10n.text("common.open_settings")) { model.onSettings?() }
+                        .font(.system(size: 12, weight: .medium)).buttonStyle(.plain).foregroundStyle(PacerPalette.primary)
+                }
+                .padding(.horizontal, IslandMetrics.rowInset).padding(.vertical, 8)
+            } else {
+                QuotaDashboardView(model: model)
+            }
+        }
+    }
+}
+
+/// Panel actions sit at the right of the task header. Pin and Settings stay
+/// one click away; refresh and quit are rare and share one menu. Collapsing
+/// needs no control: moving away, Escape or unpinning closes the panel.
+struct IslandPanelControls: View {
+    @ObservedObject var model: IslandModel
+    @State private var hovered = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if model.isDemo {
+                Text(L10n.text("demo.label")).font(.system(size: 10, weight: .semibold)).foregroundStyle(PacerPalette.secondary)
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(PacerPalette.fill, in: Capsule())
+                    .fixedSize().padding(.trailing, 4)
+            }
+            Button { model.collapseIsland() } label: {
+                Label("收起", systemImage: "chevron.up")
+                    .font(.system(size: 11, weight: .medium))
+                    .padding(.horizontal, 7).padding(.vertical, 5)
+                    .background(PacerPalette.fill, in: Capsule())
+            }
+            .buttonStyle(.plain).help("取消固定并收起")
+            .accessibilityLabel("收起")
+            IslandIconButton(symbol: model.pinned ? "pin.fill" : "pin",
+                title: model.pinned ? L10n.text("common.unpin") : L10n.text("common.pin"), active: model.pinned) { model.togglePin() }
+            IslandIconButton(symbol: "gearshape", title: L10n.text("common.settings")) { model.onSettings?() }
+            Menu {
+                Button(L10n.text("common.refresh")) { model.refreshQuota(); model.refreshTaskSources() }
+                    .disabled(model.enabledProviders.allSatisfy { model.providerRefreshing($0) })
+                Divider()
+                Button(L10n.text("common.quit")) { model.onQuit?() }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(hovered ? PacerPalette.primary : PacerPalette.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(hovered ? PacerPalette.hover : .clear))
+                    .contentShape(Circle())
+            }
+            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+            .onHover { hovered = $0 }
+            .help(L10n.text("common.more")).accessibilityLabel(L10n.text("common.more"))
+        }
+    }
+}
+
+private struct ExpandedContentHeight: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}

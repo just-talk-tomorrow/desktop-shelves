@@ -1,0 +1,241 @@
+import XCTest
+@testable import PacerCore
+
+final class StreamingRateTests: XCTestCase {
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+    private let thread = "019a0000-0000-7000-8000-000000000001"
+    private func log(_ a: inout SessionActivity, _ kind: String, seconds: Double, fields: [String: Any] = [:], outer: String = "event_msg") {
+        var p = fields; p["type"] = kind
+        let value: [String: Any] = ["timestamp": ISO8601DateFormatter().string(from: start.addingTimeInterval(seconds)), "type": outer, "payload": p]
+        a.consume(try! JSONSerialization.data(withJSONObject: value))
+    }
+    private func live(_ a: inout SessionActivity, _ method: String, seconds: Double, turn: String = "turn", fields: [String: Any] = [:]) {
+        var e = fields; e["method"] = method; e["threadId"] = thread; e["turnId"] = turn; e["at"] = start.addingTimeInterval(seconds).timeIntervalSince1970
+        a.consumeLive(e)
+    }
+    func testBlockingToolTimeIsRemovedAndDoesNotDisplayOldSpeed() {
+        var a = SessionActivity(id: thread, phaseAwareRate: true)
+        log(&a, "task_started", seconds: 0, fields: ["turn_id": "turn"])
+        log(&a, "token_count", seconds: 0, fields: ["info": ["total_token_usage": ["output_tokens": 100]]])
+        log(&a, "function_call", seconds: 5, fields: ["call_id": "tool", "name": "calculate"], outer: "response_item")
+        XCTAssertEqual(a.outputEstimate(at: start.addingTimeInterval(10))?.value, 0)
+        XCTAssertEqual(a.phase, .running)
+        log(&a, "function_call_output", seconds: 20, fields: ["call_id": "tool"], outer: "response_item")
+        log(&a, "token_count", seconds: 20, fields: ["info": ["total_token_usage": ["output_tokens": 400]]])
+        XCTAssertEqual(a.outputEstimate(at: start.addingTimeInterval(20))?.value, 60)
+    }
+    func testOverlappingToolsSubtractUnionRatherThanBothDurations() {
+        var a = SessionActivity(id: thread, phaseAwareRate: true)
+        log(&a, "task_started", seconds: 0, fields: ["turn_id": "turn"])
+        log(&a, "token_count", seconds: 0, fields: ["info": ["total_token_usage": ["output_tokens": 0]]])
+        for (seconds, id) in [(5.0, "one"), (6.0, "two")] {
+            log(&a, "function_call", seconds: seconds, fields: ["call_id": id], outer: "response_item")
+        }
+        log(&a, "function_call_output", seconds: 18, fields: ["call_id": "one"], outer: "response_item")
+        XCTAssertEqual(a.outputEstimate(at: start.addingTimeInterval(19))?.value, 0)
+        log(&a, "function_call_output", seconds: 20, fields: ["call_id": "two"], outer: "response_item")
+        log(&a, "token_count", seconds: 20, fields: ["info": ["total_token_usage": ["output_tokens": 300]]])
+        XCTAssertEqual(a.outputEstimate(at: start.addingTimeInterval(20))?.value, 60)
+    }
+    func testModelEvidenceWhileBackgroundToolRunsCountsGeneration() {
+        var a = SessionActivity(id: thread, phaseAwareRate: true)
+        log(&a, "task_started", seconds: 0, fields: ["turn_id": "turn"])
+        log(&a, "token_count", seconds: 0, fields: ["info": ["total_token_usage": ["output_tokens": 0]]])
+        log(&a, "function_call", seconds: 5, fields: ["call_id": "background"], outer: "response_item")
+        log(&a, "reasoning", seconds: 10, outer: "response_item")
+        log(&a, "function_call_output", seconds: 20, fields: ["call_id": "background"], outer: "response_item")
+        log(&a, "token_count", seconds: 20, fields: ["info": ["total_token_usage": ["output_tokens": 300]]])
+        XCTAssertEqual(a.outputEstimate(at: start.addingTimeInterval(20))?.value, 20)
+    }
+    func testMidRequestAttachSeedsCounterWithoutInventingFirstRate() {
+        let cases: [(method: String, id: String, firstCounterAt: Double, nextUsage: [String: Any])] = [
+            ("item/agentMessage/delta", thread, 2, ["outputTokens": 1060, "lastOutputTokens": 60]),
+            ("turn/attached", "local:" + thread, 1, ["outputTokens": 1060])
+        ]
+        for (method, id, firstCounterAt, nextUsage) in cases {
+            var a = SessionActivity(id: id, phaseAwareRate: true)
+            live(&a, method, seconds: 1, fields: ["startedAt": start.addingTimeInterval(-100).timeIntervalSince1970])
+            if method == "turn/attached" { XCTAssertTrue(a.liveTurnStarted) }
+            live(&a, "thread/tokenUsage/updated", seconds: firstCounterAt, fields: ["outputTokens": 1000, "lastOutputTokens": 800])
+            XCTAssertNil(a.outputEstimate(at: start.addingTimeInterval(firstCounterAt)), method)
+            live(&a, "thread/tokenUsage/updated", seconds: firstCounterAt + 2, fields: nextUsage)
+            XCTAssertEqual(a.outputEstimate(at: start.addingTimeInterval(firstCounterAt + 2))?.value, 30, method)
+        }
+    }
+    func testStreamStartUsageAndBlockingStateUseAuthoritativeCounts() {
+        var a = SessionActivity(id: thread, phaseAwareRate: true)
+        live(&a, "turn/started", seconds: 0)
+        live(&a, "thread/tokenUsage/updated", seconds: 0, fields: ["outputTokens": 600])
+        live(&a, "item/started", seconds: 5, fields: ["itemId": "tool", "itemType": "commandExecution"])
+        XCTAssertEqual(a.outputEstimate(at: start.addingTimeInterval(12))?.value, 0)
+        live(&a, "item/completed", seconds: 20, fields: ["itemId": "tool", "itemType": "commandExecution"])
+        live(&a, "thread/tokenUsage/updated", seconds: 20, fields: ["outputTokens": 900, "lastOutputTokens": 300])
+        XCTAssertEqual(a.outputEstimate(at: start.addingTimeInterval(20))?.value, 60)
+        live(&a, "turn/completed", seconds: 21, fields: ["status": "completed"])
+        live(&a, "thread/tokenUsage/updated", seconds: 22, fields: ["outputTokens": 910])
+        XCTAssertEqual(a.phase, .completed)
+        XCTAssertNil(a.outputEstimate(at: start.addingTimeInterval(22)))
+    }
+    func testNewTurnsSeedCountersWithoutReusingCachedLastRequestOrPreviousTurn() {
+        var a = SessionActivity(id: thread, phaseAwareRate: true)
+        live(&a, "turn/started", seconds: 0)
+        live(&a, "thread/tokenUsage/updated", seconds: 0.5, fields: ["outputTokens": 10_000, "lastOutputTokens": 8_000])
+        XCTAssertNil(a.outputEstimate(at: start.addingTimeInterval(0.5)), "Cached request usage is not a measurement of this turn")
+        live(&a, "thread/tokenUsage/updated", seconds: 2.5, fields: ["outputTokens": 10_040, "lastOutputTokens": 40])
+        XCTAssertEqual(a.tokensPerSecond(at: start.addingTimeInterval(2.5)), 20)
+        live(&a, "turn/completed", seconds: 3, fields: ["status": "completed"])
+        live(&a, "thread/tokenUsage/updated", seconds: 3.1, fields: ["outputTokens": 20_000])
+        live(&a, "turn/started", seconds: 4, turn: "next")
+        live(&a, "thread/tokenUsage/updated", seconds: 4.5, turn: "next", fields: ["outputTokens": 20_000, "lastOutputTokens": 9_960])
+        XCTAssertNil(a.outputEstimate(at: start.addingTimeInterval(4.5)), "Missed final accounting must not enter the next turn's rate")
+        live(&a, "thread/tokenUsage/updated", seconds: 6.5, turn: "next", fields: ["outputTokens": 20_040])
+        XCTAssertEqual(a.tokensPerSecond(at: start.addingTimeInterval(6.5)), 20)
+    }
+    func testLateUsageCannotSwitchToAnOldTurnAndToolResumeNeedsANewMeasurement() {
+        var a = SessionActivity(id: thread, phaseAwareRate: true)
+        live(&a, "turn/started", seconds: 0)
+        live(&a, "thread/tokenUsage/updated", seconds: 0, fields: ["outputTokens": 100])
+        live(&a, "thread/tokenUsage/updated", seconds: 2, fields: ["outputTokens": 200])
+        XCTAssertEqual(a.tokensPerSecond(at: start.addingTimeInterval(2)), 50)
+        live(&a, "thread/tokenUsage/updated", seconds: 2.5, turn: "old", fields: ["outputTokens": 50_000])
+        XCTAssertEqual(a.turnID, "turn")
+        XCTAssertEqual(a.tokensPerSecond(at: start.addingTimeInterval(2.5)), 50)
+        live(&a, "item/started", seconds: 3, fields: ["itemId": "tool", "itemType": "commandExecution"])
+        XCTAssertEqual(a.tokensPerSecond(at: start.addingTimeInterval(3)), 0)
+        live(&a, "item/completed", seconds: 4, fields: ["itemId": "tool", "itemType": "commandExecution"])
+        XCTAssertNil(a.outputEstimate(at: start.addingTimeInterval(4)), "Finishing a tool must not revive the pre-tool speed")
+        live(&a, "thread/tokenUsage/updated", seconds: 6, fields: ["outputTokens": 400])
+        XCTAssertEqual(a.tokensPerSecond(at: start.addingTimeInterval(6)), 60)
+        XCTAssertNil(a.outputEstimate(at: start.addingTimeInterval(21)), "A quiet generating turn must expire its numeric estimate")
+    }
+    func testRetiredTurnEventsCannotReplaceANewerTurn() {
+        for observedEnding in [false, true] {
+            var a = SessionActivity(id: thread, phaseAwareRate: true)
+            live(&a, "turn/started", seconds: 0, turn: "old")
+            live(&a, "item/started", seconds: 1, turn: "old", fields: ["itemId": "old-tool", "itemType": "commandExecution"])
+            if observedEnding { live(&a, "turn/completed", seconds: 2, turn: "old", fields: ["status": "interrupted"]) }
+            live(&a, "turn/started", seconds: 3, turn: "new")
+            live(&a, "item/started", seconds: 3.1, turn: "new", fields: ["itemId": "reasoning", "itemType": "reasoning"])
+            let current = a
+            for method in ["item/completed", "item/started", "item/agentMessage/delta", "turn/attached", "turn/started", "turn/completed"] {
+                live(&a, method, seconds: 3.2, turn: "old", fields: ["itemId": "old-tool", "itemType": "commandExecution", "status": "completed"])
+                XCTAssertEqual(a, current, method)
+            }
+            live(&a, "turn/completed", seconds: 4, turn: "new", fields: ["status": "completed"])
+            XCTAssertEqual(a.phase, .completed)
+            XCTAssertTrue(a.liveTurnStarted)
+        }
+    }
+    func testReconnectCanReattachCurrentTurnAndAdoptAnUnseenTurn() {
+        var a = SessionActivity(id: thread, phaseAwareRate: true)
+        live(&a, "turn/started", seconds: 0)
+        live(&a, "thread/status/changed", seconds: 1, fields: ["status": "systemError"])
+        live(&a, "thread/observed", seconds: 2, fields: ["status": "active"])
+        live(&a, "item/started", seconds: 3, fields: ["itemId": "reasoning", "itemType": "reasoning"])
+        XCTAssertEqual(a.turnID, "turn")
+        XCTAssertTrue(a.liveTurnStarted)
+        a.markDiscontinuity()
+        live(&a, "turn/attached", seconds: 4)
+        XCTAssertEqual(a.phase, .running)
+        live(&a, "thread/status/changed", seconds: 4.1, fields: ["status": "systemError"])
+        live(&a, "thread/observed", seconds: 4.2, fields: ["status": "active"])
+        live(&a, "item/started", seconds: 5, turn: "unseen", fields: ["itemId": "new-reasoning", "itemType": "reasoning"])
+        XCTAssertEqual(a.turnID, "unseen", "Mid-turn attach remains supported without a start event")
+        XCTAssertTrue(a.hasLiveEvidence)
+        let adopted = a
+        live(&a, "item/completed", seconds: 5.1, fields: ["itemId": "old-tool", "itemType": "commandExecution"])
+        XCTAssertEqual(a, adopted, "Adopting a new ID after metadata-only reconnect retires the last known turn")
+        live(&a, "turn/completed", seconds: 6, turn: "unseen", fields: ["status": "completed"])
+        XCTAssertEqual(a.phase, .completed)
+    }
+    func testBothCollaborationToolNamesPauseRateAndResumeOnCompletion() {
+        for kind in ["collabAgentToolCall", "collabToolCall"] {
+            var a = SessionActivity(id: thread, phaseAwareRate: true)
+            live(&a, "turn/started", seconds: 0)
+            live(&a, "thread/tokenUsage/updated", seconds: 0, fields: ["outputTokens": 100])
+            live(&a, "thread/tokenUsage/updated", seconds: 2, fields: ["outputTokens": 200])
+            XCTAssertEqual(a.tokensPerSecond(at: start.addingTimeInterval(2)), 50)
+            live(&a, "item/started", seconds: 3, fields: ["itemId": "agent", "itemType": kind])
+            XCTAssertEqual(a.stage, .tool)
+            XCTAssertEqual(a.outputEstimate(at: start.addingTimeInterval(10))?.value, 0)
+            live(&a, "item/completed", seconds: 13, fields: ["itemId": "agent", "itemType": kind])
+            XCTAssertEqual(a.stage, .thinking)
+            XCTAssertNil(a.outputEstimate(at: start.addingTimeInterval(13)))
+            live(&a, "thread/tokenUsage/updated", seconds: 15, fields: ["outputTokens": 350])
+            XCTAssertEqual(a.tokensPerSecond(at: start.addingTimeInterval(15)), 50, "Tool wait is excluded from generation time")
+        }
+    }
+    func testIdleStatusAndOrphanTerminalDoNotDeclareTaskFinished() {
+        var a = SessionActivity(id: thread, phaseAwareRate: true)
+        live(&a, "turn/completed", seconds: 0, fields: ["status": "completed"])
+        XCTAssertEqual(a.phase, .unknown)
+        live(&a, "turn/started", seconds: 1)
+        live(&a, "thread/status/changed", seconds: 2, fields: ["status": "idle"])
+        XCTAssertEqual(a.phase, .running)
+        live(&a, "turn/completed", seconds: 3, turn: "other", fields: ["status": "completed"])
+        XCTAssertEqual(a.phase, .running)
+    }
+    func testUnrelatedThreadUnknownEventsAndReviewsCannotChangeUserState() {
+        var a = SessionActivity(id: thread, phaseAwareRate: true)
+        live(&a, "unknown/event", seconds: 0)
+        XCTAssertEqual(a.phase, .unknown)
+        a.consumeLive(["method": "turn/started", "threadId": UUID().uuidString.lowercased(), "turnId": "other", "at": start.timeIntervalSince1970])
+        XCTAssertEqual(a.phase, .unknown)
+        a.consumeLive(["method": "metadata", "threadId": thread, "source": "guardian_review", "at": start.timeIntervalSince1970])
+        live(&a, "turn/started", seconds: 1)
+        XCTAssertTrue(ActivitySourceMerger.merge(logged: [], streamed: [a]).isEmpty)
+    }
+    func testLiveAndLogCopiesDeduplicateAndNewerLoggedTurnWins() {
+        var logged = SessionActivity(id: "rollout-" + thread + ".jsonl", phaseAwareRate: true)
+        var streamed = SessionActivity(id: thread, phaseAwareRate: true)
+        log(&logged, "task_started", seconds: 0, fields: ["turn_id": "turn"])
+        live(&streamed, "turn/started", seconds: 1)
+        XCTAssertEqual(ActivitySourceMerger.merge(logged: [logged], streamed: [streamed]).count, 1)
+        log(&logged, "task_started", seconds: 10, fields: ["turn_id": "newer"])
+        let merged = ActivitySourceMerger.merge(logged: [logged], streamed: [streamed])
+        XCTAssertEqual(merged.first?.turnID, "newer")
+        live(&streamed, "item/agentMessage/delta", seconds: 11, turn: "old-but-attached-late")
+        XCTAssertEqual(ActivitySourceMerger.merge(logged: [logged], streamed: [streamed]).first?.turnID, "newer")
+    }
+    func testSameThreadIdOnDifferentHostsRemainsTwoTasks() {
+        var local = SessionActivity(id: thread, phaseAwareRate: true)
+        var remote = SessionActivity(id: thread, sourceHost: "gpu", sourceHostID: "remote-ssh-discovered:gpu", phaseAwareRate: true)
+        log(&local, "task_started", seconds: 0, fields: ["turn_id": "local"])
+        log(&remote, "task_started", seconds: 0, fields: ["turn_id": "ssh"])
+        let combined = ActivitySourceMerger.merge(logged: [local], streamed: [remote])
+        XCTAssertEqual(combined.count, 2)
+        XCTAssertEqual(ActivityOverview(activities: combined, at: start).running.count, 2)
+    }
+    func testSocketWithoutItemEvidenceDoesNotMaskFallbackAndDisconnectKeepsLogs() {
+        var state = RuntimeEventState(sourceID: nil, sourceName: nil)
+        var logged = SessionActivity(id: thread)
+        log(&logged, "task_started", seconds: 0, fields: ["turn_id": "logged"])
+        state.replaceLocalFallback([logged])
+        state.consume(["kind": "status", "connected": true])
+        state.consume(["kind": "runtime", "event": ["method": "metadata", "threadId": thread, "at": start.timeIntervalSince1970, "name": "test"]])
+        XCTAssertEqual(state.activities.first?.turnID, "logged")
+        state.consume(["kind": "status", "connected": false])
+        XCTAssertEqual(state.activities.first?.phase, .running)
+    }
+    func testTransportDisconnectDoesNotEraseVerifiedTurnCompletion() {
+        var state = RuntimeEventState(sourceID: nil, sourceName: nil)
+        state.consume(["kind": "status", "connected": true])
+        for (method, seconds) in [("turn/started", 0.0), ("turn/completed", 1.0)] {
+            state.consume(["kind": "runtime", "event": ["method": method, "threadId": thread, "turnId": "turn",
+                "at": start.addingTimeInterval(seconds).timeIntervalSince1970, "status": "completed"]])
+        }
+        state.consume(["kind": "status", "connected": false])
+        XCTAssertEqual(state.activities.first?.phase, .completed)
+    }
+    func testBlockedAndUnmeasuredGeneratingTasksDoNotDisplayFalseGlobalZero() {
+        var blocked = SessionActivity(id: thread, phaseAwareRate: true)
+        var unmeasured = SessionActivity(id: "other", phaseAwareRate: true)
+        live(&blocked, "turn/started", seconds: 0)
+        live(&blocked, "item/started", seconds: 1, fields: ["itemId": "tool", "itemType": "commandExecution"])
+        log(&unmeasured, "task_started", seconds: 0, fields: ["turn_id": "other"])
+        let overview = ActivityOverview(activities: [blocked, unmeasured], at: start.addingTimeInterval(2))
+        XCTAssertEqual(overview.running.count, 2)
+        XCTAssertNil(overview.displayedRate)
+        XCTAssertNil(ActivityOverview(activities: [blocked], at: start.addingTimeInterval(2)).displayedRate, "An unmeasured tool wait cannot fabricate a measured zero")
+    }
+}
